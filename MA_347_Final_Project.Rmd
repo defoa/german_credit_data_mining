@@ -232,4 +232,3 @@ The validation classification rate is 0.70
 (FP_rate <- 29/(29+49))
 ```
 The false positive rate is 0.27
-
