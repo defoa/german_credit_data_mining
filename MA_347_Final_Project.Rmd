@@ -1,0 +1,235 @@
+---
+title: "MA 347 Final Project"
+output: html_document
+---
+
+```{r}
+library(magrittr)
+library(dplyr)
+library(rpart)
+library(rpart.plot)
+library(caret)
+```
+
+# Transforming the data
+
+
+```{r}
+germancredit <- read.csv("~/GermanCredit.csv")
+germancredit$purpose_credit <- rep(0, dim(germancredit)[1]) #new column for all purpose of credit variables
+
+idx <- which(germancredit$NEW_CAR == 1)
+germancredit$purpose_credit[idx] <- "New Car"
+
+idx <- which(germancredit$USED_CAR == 1)
+germancredit$purpose_credit[idx] <- "Used Car"
+
+idx <- which(germancredit$FURNITURE == 1)
+germancredit$purpose_credit[idx] <- "Furniture"
+
+idx <- which(germancredit$RADIO.TV == 1)
+germancredit$purpose_credit[idx] <- "Radio/TV"
+
+idx <- which(germancredit$EDUCATION == 1)
+germancredit$purpose_credit[idx] <- "Education"
+
+idx <- which(germancredit$RETRAINING == 1)
+germancredit$purpose_credit[idx] <- "Retraining"
+
+idx <- which(germancredit$purpose_credit == 0)
+germancredit$purpose_credit[idx] <- "Other"
+
+germancredit$purpose_credit <- as.factor(germancredit$purpose_credit)
+```
+
+
+```{r}
+germancredit$marital_status <- rep(0, dim(germancredit)[1]) # new column for marital status variables
+
+idx <- which(germancredit$MALE_DIV == 1)
+germancredit$marital_status[idx] <- "Male and Divorced"
+
+idx <- which(germancredit$MALE_SINGLE == 1)
+germancredit$marital_status[idx] <- "Male and Single"
+
+idx <- which(germancredit$MALE_MAR_or_WID == 1)
+germancredit$marital_status[idx] <- "Male and Married/Widowed"
+
+idx <- which(germancredit$marital_status == 0)
+germancredit$marital_status[idx] <- "Other"
+
+germancredit$marital_status <- as.factor(germancredit$marital_status)
+```
+
+```{r}
+germancredit$ownership_status <- rep(0, dim(germancredit)[1]) # new column column for owning and renting
+
+idx <- which(germancredit$OWN_RES == 1)
+germancredit$ownership_status[idx] <- "Own Residence"
+
+idx <- which(germancredit$RENT == 1)
+germancredit$ownership_status[idx] <- "Rent Residence"
+
+
+idx <- which(germancredit$ownership_status == 0)
+germancredit$ownership_status[idx] <- "Other"
+
+germancredit$ownership_status <- as.factor(germancredit$ownership_status)
+```
+
+```{r}
+germancredit$realestate <- rep(0, dim(germancredit)[1]) # new column real estate and no real estate
+
+idx <- which(germancredit$REAL_ESTATE == 1)
+germancredit$realestate[idx] <- "Yes"
+
+idx <- which(germancredit$PROP_UNKN_NONE == 1)
+germancredit$realestate[idx] <- "No/unknown"
+
+
+idx <- which(germancredit$realestate == 0)
+germancredit$realestate[idx] <- "Other"
+
+germancredit$realestate <- as.factor(germancredit$realestate)
+```
+
+# Splitting the dataset
+
+```{r}
+set.seed(2)
+train.index <- sample(c(1:dim(germancredit)[1]), dim(germancredit)[1]*0.7)  
+train.df <- germancredit[train.index, ]
+valid.df <- germancredit[-train.index, ]
+```
+
+# CART Model
+Making the classification tree
+```{r}
+set.seed(1)
+class_tr <- rpart(RESPONSE ~ CHK_ACCT + HISTORY + purpose_credit + SAV_ACCT + EMPLOYMENT + realestate + FOREIGN, 
+                  data = train.df, 
+                  minsplit = 1,
+                    method = "class") 
+```
+
+finding the optimal cp
+```{r}
+lowest_cp<-class_tr$cptable[which.min(class_tr$cptable[,"xerror"]),"CP"]
+lowest_cp
+```
+
+Pruning the tree
+```{r}
+pruned_tr <- prune(class_tr, cp = 0.01530612 )
+```
+
+
+Checking classification rate of training data
+```{r}
+treepred <- predict(pruned_tr, newdata = train.df, type = "class")
+confusionMatrix(treepred, as.factor(train.df$RESPONSE))
+```
+
+Correct .79 of the time on the training data
+
+
+validation data testing
+
+```{r}
+treepred_2 <- predict(pruned_tr, newdata = valid.df, type = "class")
+confusionMatrix(treepred_2, as.factor(valid.df$RESPONSE))
+```
+
+.73 on the validation dataset
+
+
+```{r}
+prp(pruned_tr, type = 1, extra = 1, under = TRUE, split.font = 1, varlen = -10)
+```
+
+11 splits total
+
+
+# Logistic Regression
+
+```{r}
+# make columns factor variables
+germancredit$CHK_ACCT <- factor(germancredit$CHK_ACCT, levels = c(0, 1, 2, 3), labels = c("< 0", "0-200", ">200", "No checking account"))
+
+germancredit$HISTORY <- factor(germancredit$HISTORY, levels = c(0, 1, 2, 3, 4), labels = c("no credits", "all credits paid", "credits paid until now", "delay in paying in past", "critical account"))
+
+germancredit$SAV_ACCT <- factor(germancredit$SAV_ACCT, levels = c(0, 1, 2, 3, 4), labels = c("< 100", "100-500", "500-1000",">1000", "no savings"))
+
+germancredit$EMPLOYMENT <- factor(germancredit$EMPLOYMENT, levels = c(0, 1, 2, 3, 4), labels = c("unemployed", "< 1", "1-4","4-7", ">7"))
+
+germancredit$PRESENT_RESIDENT <- factor(germancredit$PRESENT_RESIDENT, levels = c(0, 1, 2, 3, 4), labels = c("0", "1", "2","3", ">4"))
+
+germancredit$JOB <- factor(germancredit$JOB, levels = c(0, 1, 2, 3), labels = c("unemployed", "unskilled", "skilled/","management/self-employed"))
+
+germancredit$CO.APPLICANT <- factor(germancredit$CO.APPLICANT, levels = c(0, 1), labels = c("No", "Yes"))
+
+germancredit$GUARANTOR <- factor(germancredit$GUARANTOR, levels = c(0, 1), labels = c("No", "Yes"))
+
+germancredit$OTHER_INSTALL <- factor(germancredit$OTHER_INSTALL, levels = c(0, 1), labels = c("No", "Yes"))
+
+germancredit$FOREIGN <- factor(germancredit$FOREIGN, levels = c(0, 1), labels = c("No", "Yes"))
+
+germancredit$TELEPHONE <- factor(germancredit$TELEPHONE, levels = c(0, 1), labels = c("No", "Yes"))
+```
+
+```{r}
+germancredit <- germancredit[, -c(1, 5:10, 15:17, 21:22, 25:26)] # delete observation id column and merged binary variables
+```
+
+
+Forward Stepwise AIC For Variable Selection
+```{r}
+fm.0 <- logit <- glm(RESPONSE ~ 1, data = train.df, family = "binomial") 
+fm.f <- step(fm.0, 
+             scope = list(upper = ~ CHK_ACCT + DURATION + HISTORY + AMOUNT + SAV_ACCT + EMPLOYMENT + INSTALL_RATE + CO.APPLICANT + GUARANTOR + PRESENT_RESIDENT + AGE + OTHER_INSTALL + NUM_CREDITS + JOB + NUM_DEPENDENTS + TELEPHONE + FOREIGN + purpose_credit + marital_status + ownership_status + realestate,
+                          lower = ~ 1),
+             direction = "forward")
+```
+
+```{r}
+fm.0 <- logit <- glm(RESPONSE ~ CHK_ACCT + DURATION + HISTORY + AMOUNT + SAV_ACCT + EMPLOYMENT + INSTALL_RATE + CO.APPLICANT + GUARANTOR + PRESENT_RESIDENT + AGE + OTHER_INSTALL + JOB + NUM_DEPENDENTS + TELEPHONE + FOREIGN + purpose_credit + marital_status + ownership_status + realestate, data = train.df, family = "binomial") 
+fm.f <- step(fm.0, 
+             scope = list(upper = ~ .,
+                          lower = ~ CHK_ACCT),
+             direction = "backward")
+```
+
+The forwards and backwards AIC result in slightly differet best models, I will use the one create by the backwards AIC because it has less variables, so it is more compact model.
+
+```{r}
+logit <- glm(RESPONSE ~ CHK_ACCT + DURATION + HISTORY + SAV_ACCT + EMPLOYMENT + INSTALL_RATE + GUARANTOR + PRESENT_RESIDENT + AGE + OTHER_INSTALL + FOREIGN + purpose_credit + marital_status + realestate, data = train.df, family = binomial(link = 'logit'))
+
+summary(logit)
+```
+
+```{r}
+pred.train <- predict(logit, newdata = train.df, type = "response")
+actual.train <- train.df$RESPONSE
+pred.val <- predict(logit, newdata = valid.df, type = "response")
+actual.val <- valid.df$RESPONSE
+```
+
+```{r}
+predClass.train <- ifelse(pred.train >0.5,1,0)
+
+confusionMatrix(factor(actual.train), factor(predClass.train), positive = '1')
+```
+Using a 0.5 cutoff, the training classification rate is 0.79
+
+```{r}
+predClass.val <- ifelse(pred.val >0.5,1,0)
+
+confusionMatrix(factor(actual.val), factor(predClass.val), positive = '1')
+```
+
+The validation classification rate is 0.70
+```{r}
+(FP_rate <- 29/(29+49))
+```
+The false positive rate is 0.27
+
